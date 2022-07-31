@@ -6,8 +6,9 @@ library("ape")
 library("spider")
 library("tidyverse")
 library("magrittr")
-#library("ips")
+library("ips")
 library("phangorn")
+library("ggtree")
 source("https://raw.githubusercontent.com/legalLab/protocols-scripts/master/scripts/hapCollapse.R")
 
 # load table and make a label
@@ -24,13 +25,91 @@ tissues.df %>% filter(!label %in% pull(seqs.df,id))
 seqs.df %>% filter(!id %in% pull(tissues.df,label)) 
 summary(sort(tissues.df$label) == sort(seqs.df$id))
 
-# write out fasta with just ids
-seqs.fas.renamed <- seqs.fas
-#names(seqs.fas.renamed) <- 
-pull(seqs.df,id)
+
+# load up old tissue table from Ota et al. 2020
+
+nigro.df <- read_csv("https://raw.githubusercontent.com/boopsboops/myloplus-spnov/master/data/tissues-master.csv")
+pull(nigro.df,associatedSequences)
+seqs.df %>% filter(!id %in% pull(nigro.df,associatedSequences)) %>% print(n=Inf)
+new.data.df <- tissues.df %>% filter(!label %in% pull(nigro.df,associatedSequences))
+new.data.df %>% print(n=Inf)
+new.data.df %>% write_csv(here("temp/new-data.csv"))
+
+
+# read in new data
+new.data.rf <- read_csv(here("temp/tissues-master.csv"))
+
+new.data.rf %<>% mutate(label=if_else(is.na(associatedSequences),catalogNumber,associatedSequences))
+
+# check
+new.data.rf %>% distinct(scientificName,specificEpithet) %>% arrange(scientificName,specificEpithet) %>% print(n=Inf)
+
+new.data.rf %>% mutate(sciNameShort=paste(str_split_fixed(scientificName," ",3)[,1],str_split_fixed(scientificName," ",3)[,2]), genusspp=paste(genus,specificEpithet)) %>% 
+    mutate(tf=if_else(sciNameShort==genusspp,TRUE,FALSE)) %>%
+    filter(tf==FALSE) %>%
+    distinct(label,scientificName,taxonRank,genus,identificationQualifier,specificEpithet) %>%
+    print(n=Inf)
+
+#
+new.data.rf.red <- new.data.rf %>% mutate(sciNameOta=if_else(is.na(identificationQualifier),paste(genus,specificEpithet),paste(genus,identificationQualifier)),waterBodyNew=waterBody) %>% distinct(label,sciNameOta,waterBodyNew)
+old.data.rf.red <- tissues.df %>% mutate(sciNameVal=if_else(is.na(identificationQualifier),paste(genus,specificEpithet),paste(genus,identificationQualifier))) %>% distinct(label,sciNameVal,waterBody)
+
+seqs.df.names <- seqs.df %>% mutate(sciNameFasta=paste(genus,species)) %>% rename(label=id) %>% select(label,sciNameFasta)
+
+
+mismatch.names <- full_join(old.data.rf.red,new.data.rf.red) %>% 
+   mutate(mismatchName=if_else(sciNameOta==sciNameVal,TRUE,FALSE),mismatchWater=if_else(waterBody==waterBodyNew,TRUE,FALSE)) %>% 
+   select(label,sciNameOta,sciNameVal,mismatchName) %>%
+   arrange(sciNameOta,label) %>%
+   #left_join(seqs.df.names) %>%
+   filter(mismatchName==FALSE) %>%
+   select(-mismatchName)
+
+mismatch.names %>% print(n=Inf)
+
+mismatch.names %>% write_csv(here("temp/mismatch-names.csv"))
+
+
+#  labels not in fasta / ids not in labels
+new.data.rf %>% filter(!label %in% pull(seqs.df,id))
+seqs.df %>% filter(!id %in% pull(new.data.rf,label)) 
+
+###############
+
+# load cleaned fasta
+myloplus.unaligned <- read.FASTA(here("temp/myloplus-unaligned.fasta"))
+
+# align
+myloplus.aligned <- as.matrix(mafft(myloplus.unaligned,exec="mafft"))
+
+# make a tree
+myloplus.tr <- nj(dist.dna(myloplus.aligned,model="raw",pairwise.deletion=TRUE))
+
+# ladderize tree
+myloplus.tr <- ladderize(midpoint(myloplus.tr))
+
+myloplus.tr$edge.length[which(myloplus.tr$edge.length < 0)] <- 0
+
+new.data.rf.red.labs <- new.data.rf.red %>% mutate(labs=paste(label,sciNameOta,waterBodyNew,sep=" | "))
+
+# plot tree
+p <- myloplus.tr %>% 
+    ggtree(color="grey50") %<+% new.data.rf.red.labs +
+    geom_tiplab(aes(label=labs),geom="text",offset=0.0005,align=TRUE,color="grey50") + #,align=TRUE
+    theme(legend.position="none") +
+    #scale_color_manual(values=brewer.pal(9,"Set1")) + 
+    xlim(0,0.15)
+
+# plot
+ggsave(filename=here("temp/myloplus.tr.pdf"),plot=p,width=297,height=1800,units="mm",limitsize=FALSE)
 
 
 
+
+
+
+
+###########################################
 # read data
 tissues.df <- read_csv(here("assets/tissues-master.csv"))
 # get seqs from GenBank

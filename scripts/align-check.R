@@ -11,6 +11,19 @@ library("phangorn")
 library("ggtree")
 source("https://raw.githubusercontent.com/legalLab/protocols-scripts/master/scripts/hapCollapse.R")
 
+## again for new seqs
+tissues.df <- read_csv(here("temp/tissues-master.csv"))
+tissues.df %>% print(width=Inf)
+
+#
+novos.df <- read_csv(here("temp/Dados_GB_Novos_schom.csv"))
+novos.df %>% print(width=Inf)
+
+# setdiff
+tissues.df %>% filter(!label %in% pull(novos.df,label))%>% print(n=Inf)
+novos.df %>% filter(!label %in% pull(tissues.df,label)) %>% print(n=Inf)
+
+
 # load table and make a label
 tissues.df <- read_csv(here("temp/DwC_Val_200722.csv"))
 tissues.df %<>% mutate(label=if_else(is.na(associatedSequences),catalogNumber,associatedSequences))

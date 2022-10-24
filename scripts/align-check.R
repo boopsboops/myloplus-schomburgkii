@@ -9,7 +9,10 @@ library("magrittr")
 library("ips")
 library("phangorn")
 library("ggtree")
+library("traits")
+library("lubridate")
 source("https://raw.githubusercontent.com/legalLab/protocols-scripts/master/scripts/hapCollapse.R")
+# renv::install("boopsboops/traits@b62d0431b34d119038e23cec125bb46e8df52e13")
 
 ## again for new seqs
 tissues.df <- read_csv(here("temp/tissues-master.csv"))
@@ -21,8 +24,163 @@ novos.df %>% print(width=Inf)
 
 # setdiff
 tissues.df %>% filter(!label %in% pull(novos.df,label))%>% print(n=Inf)
-novos.df %>% filter(!label %in% pull(tissues.df,label)) %>% print(n=Inf)
+novos.df.new <- novos.df %>% filter(!label %in% pull(tissues.df,label)) 
+#novos.df.new %>% write_csv("temp/additions.csv")
 
+
+# get fresh copies
+
+# FUNCTION TO RUN PARALLEL NCBI_BYID WITH TIMEOUT AND REPEAT
+ncbi_byid_parallel <- function(accs){
+    start_time <- Sys.time()
+    Sys.sleep(time=runif(n=1,min=0,max=3))
+    crul::set_opts(http_version=2)
+    ncbi.tab <- traits::ncbi_byid(accs,verbose=FALSE)
+    if(class(ncbi.tab)!="data.frame") {
+        #writeLines("Error found! Repeating ...")
+        Sys.sleep(time=3)
+        crul::set_opts(http_version=2)
+        ncbi.tab <- traits::ncbi_byid(accs,verbose=FALSE)
+    } else {
+        ncbi.tab <- ncbi.tab
+    }
+    if(class(ncbi.tab)!="data.frame") {
+        stop(writeLines("Searches failed ... aborted")) 
+    } else {
+        end_time <- Sys.time()
+        writeLines(paste0("Metadata for ",length(accs)," accessions downloaded (starting ",accs[1],"). Download took ",round(as.numeric(end_time-start_time),digits=2)," seconds."))
+        return(ncbi.tab)
+    }
+}
+
+# run
+novos.df.gb <- ncbi_byid_parallel(pull(novos.df.new,label))
+
+novos.df.gb.clean <- novos.df.gb %>% filter(gi_no!="NCBI_GENOMES") %>% #glimpse()
+    distinct(gi_no, .keep_all=TRUE) %>% 
+    mutate(lat=paste(str_split_fixed(lat_lon, " ", 4)[,1], str_split_fixed(lat_lon, " ", 4)[,2]), lon=paste(str_split_fixed(lat_lon, " ", 4)[,3], str_split_fixed(lat_lon, " ", 4)[,4])) %>%
+    mutate(lat=if_else(grepl(" N",lat), true=str_replace_all(lat," N",""), false=if_else(grepl(" S",lat), true=paste0("-",str_replace_all(lat," S","")), false=lat))) %>%
+    mutate(lon=if_else(grepl(" E",lon), true=str_replace_all(lon," E",""), false=if_else(grepl(" W",lon), true=paste0("-",str_replace_all(lon," W","")), false=lon))) %>% 
+    mutate(lat=str_replace_all(lat,"^ ", NA_character_), lon=str_replace_all(lon,"^ ", NA_character_)) %>%
+    mutate(lat=as.numeric(lat), lon=as.numeric(lon)) %>% 
+    select(acc_no,taxon,specimen_voucher,country,lat,lon,collected_by,identified_by,collection_date) %>%
+    rename(catalogNumber=specimen_voucher,associatedSequences=acc_no,scientificName=taxon,decimalLatitude=lat,decimalLongitude=lon,verbatimLocality=country,eventDate=collection_date,recordedBy=collected_by,identifiedBy=identified_by) %>%
+    mutate(label=str_replace_all(associatedSequences,"\\.[0-9]",""),
+        genus=str_split_fixed(scientificName," ",2)[,1],
+        specificEpithet=str_split_fixed(scientificName," ",2)[,2],
+        country=str_split_fixed(verbatimLocality,":",2)[,1],
+        eventDate=str_replace_all(eventDate,"\\..*",". et al."),
+        recordedBy=str_replace_all(recordedBy,"\\..*",". et al."),
+        eventDate=as.character(lubridate::dmy(eventDate))) %>%
+    mutate(otherCatalogNumbers=NA,
+        institutionCode=NA,
+        collectionCode=NA,
+        basisOfRecord=NA,
+        typeStatus=NA,
+        taxonRank="species",
+        kingdom="Animalia",
+        phylum="Chordata",
+        class="Actinopterygii",
+        order="Characiformes",
+        family="Serrasalmidae",
+        identificationQualifier=NA,
+        stateProvince=NA,
+        waterBody=NA) %>%
+    select(label,associatedSequences,otherCatalogNumbers,catalogNumber,institutionCode,collectionCode,basisOfRecord,typeStatus,scientificName,kingdom,phylum,class,order,family,genus,specificEpithet,taxonRank,identificationQualifier,identifiedBy,decimalLatitude,decimalLongitude,country,stateProvince,waterBody,eventDate,verbatimLocality,recordedBy)
+
+novos.df.gb.clean %>% write_csv("temp/additions-gb.csv")
+
+# reload and check 
+tissues.df <- read_csv(here("temp/tissues-master.csv"))
+tissues.df %>% print(width=Inf)
+unique(pull(tissues.df,scientificName)[-which(paste(str_split_fixed(pull(tissues.df,scientificName)," ",3)[,1], str_split_fixed(pull(tissues.df,scientificName)," ",3)[,2]) == paste(pull(tissues.df,genus),pull(tissues.df,specificEpithet)))])
+
+# check against fasta
+old.seqs.fas <- read.FASTA(here("temp/myloplus-unaligned.fasta"))
+new.seqs.fas <- read.FASTA(here("temp/myloplus-unaligned-new.fasta"))
+renamed.seqs.fas <- read.FASTA(here("temp/sequences_030822.fasta"))
+
+# get diffs
+base::setdiff(labels(old.seqs.fas),labels(new.seqs.fas))
+base::setdiff(labels(new.seqs.fas),labels(old.seqs.fas))
+
+joined.seqs.fas <- c(old.seqs.fas,new.seqs.fas[base::setdiff(labels(new.seqs.fas),labels(old.seqs.fas))])
+base::setdiff(labels(joined.seqs.fas),pull(tissues.df,label))
+base::setdiff(pull(tissues.df,label),labels(joined.seqs.fas))
+
+# check joined 
+new.joined.seqs.fas <- c(new.seqs.fas,renamed.seqs.fas[base::setdiff(labels(renamed.seqs.fas),labels(new.seqs.fas))])
+base::setdiff(labels(joined.seqs.fas),pull(tissues.df,label))
+base::setdiff(pull(tissues.df,label),labels(joined.seqs.fas))
+
+# write out
+write.FASTA(joined.seqs.fas[sort(labels(joined.seqs.fas))],file="temp/myloplus-unaligned-all.fasta")
+
+#read back in
+joined.seqs.fas <- read.FASTA("temp/myloplus-unaligned-all.fasta")
+
+# check with others
+base::setdiff(labels(joined.seqs.fas),labels(renamed.seqs.fas))
+base::setdiff(labels(renamed.seqs.fas),labels(joined.seqs.fas))
+
+# compare the tables
+master.df <- read_csv(here("temp/tissues-master.csv"))
+july.df <- read_csv(here("temp/DwC_Val_200722.csv"))
+aug.df <- read_csv(here("temp/DwC_Val_200722_v2.csv"))
+
+master.df.spp <- master.df %>% mutate(speciesNameMaster=if_else(is.na(identificationQualifier),paste(genus,specificEpithet),paste(genus,identificationQualifier))) %>% select(label,speciesNameMaster)
+july.df.spp <- july.df %>% mutate(speciesNameJuly=if_else(is.na(identificationQualifier),paste(genus,specificEpithet),paste(genus,identificationQualifier))) %>% select(label,speciesNameJuly)
+aug.df.spp <- aug.df %>% mutate(speciesNameAug=if_else(is.na(identificationQualifier),paste(genus,specificEpithet),paste(genus,identificationQualifier))) %>% select(label,speciesNameAug)
+
+names.changed <- master.df.spp %>% 
+    full_join(july.df.spp) %>% 
+    full_join(aug.df.spp) %>% 
+    replace_na(list(speciesNameMaster="NA",speciesNameJuly="NA",speciesNameAug="NA")) %>%
+    mutate(nameMatch=if_else(speciesNameMaster==speciesNameJuly & speciesNameMaster==speciesNameAug,TRUE,FALSE)) %>%
+    mutate(inFasta=if_else(label %in% labels(renamed.seqs.fas) | label %in% labels(new.seqs.fas),TRUE,FALSE)) %>%
+    arrange(nameMatch,inFasta,speciesNameMaster,label)# %>% print(n=Inf)
+names.changed %>% print(n=Inf)
+#names.changed %>% write_csv(here("temp/name-changes.csv"))
+
+################################### make tree
+joined.seqs.fas <- read.FASTA("temp/myloplus-unaligned-all.fasta")
+master.df <- read_csv(here("temp/tissues-master.csv"))
+names.changed <- read_csv(here("temp/name-changes.csv"))
+
+# align
+myloplus.aligned <- as.matrix(mafft(joined.seqs.fas,exec="mafft"))
+
+# make a tree
+myloplus.tr <- nj(dist.dna(myloplus.aligned,model="raw",pairwise.deletion=TRUE))
+myloplus.tr.ml <- phangorn::optim.pml(phangorn::pml(myloplus.tr, phangorn::as.phyDat(myloplus.aligned), k=4, inv=0, model="HKY"), optNni=TRUE, optGamma=TRUE, optInv=FALSE, model="HKY")
+
+# ladderize tree
+myloplus.tr <- ladderize(midpoint(myloplus.tr.ml$tree))
+myloplus.tr$edge.length[which(myloplus.tr$edge.length < 0)] <- 0
+
+master.df.labs <- master.df %>% 
+    mutate(sciName=if_else(is.na(identificationQualifier),paste(genus,specificEpithet),paste(genus,identificationQualifier))) %>% 
+    mutate(labsPhy=paste(label,sciName,waterBody,sep=" | ")) %>%
+    mutate(problem=if_else(label %in% pull(names.changed,label),TRUE,FALSE)) %>%
+    select(label,labsPhy,problem)
+
+
+# plot tree
+p <- myloplus.tr %>% 
+    ggtree(color="grey50") %<+% master.df.labs +
+    geom_tiplab(aes(label=labsPhy,color=problem),geom="text",offset=0.0005,align=TRUE) + 
+    theme(legend.position="none") +
+    scale_color_manual(values=c("grey50","red2")) + 
+    xlim(0,0.35)
+
+# plot
+ggsave(filename=here("temp/myloplus.tr.oct.pdf"),plot=p,width=297,height=2500,units="mm",limitsize=FALSE)
+
+
+
+
+
+##################
 
 # load table and make a label
 tissues.df <- read_csv(here("temp/DwC_Val_200722.csv"))

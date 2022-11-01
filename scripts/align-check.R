@@ -142,6 +142,22 @@ names.changed <- master.df.spp %>%
 names.changed %>% print(n=Inf)
 #names.changed %>% write_csv(here("temp/name-changes.csv"))
 
+
+# check against fasta
+joined.seqs.fas <- read.FASTA("temp/myloplus-unaligned-all.fasta")
+master.df <- read_csv(here("temp/tissues-master.csv"))
+base::setdiff(labels(joined.seqs.fas),pull(master.df,label))
+base::setdiff(pull(master.df,label),labels(joined.seqs.fas))
+length(labels(joined.seqs.fas)) 
+length(labels(joined.seqs.fas)) == length(pull(master.df,label))
+
+# check missing fasta
+latest.fas <- read.FASTA("temp/orig/update_01-11-2022/Myleus_group_new_seqs_311022_red.fasta")
+labels(latest.fas)
+base::setdiff(labels(latest.fas),labels(joined.seqs.fas))
+base::setdiff(labels(joined.seqs.fas),labels(latest.fas))
+
+
 ################################### make tree
 joined.seqs.fas <- read.FASTA("temp/myloplus-unaligned-all.fasta")
 master.df <- read_csv(here("temp/tissues-master.csv"))
@@ -151,8 +167,8 @@ names.changed <- read_csv(here("temp/name-changes.csv"))
 myloplus.aligned <- as.matrix(mafft(joined.seqs.fas,exec="mafft"))
 
 # make a tree
-myloplus.tr <- nj(dist.dna(myloplus.aligned,model="raw",pairwise.deletion=TRUE))
-myloplus.tr.ml <- phangorn::optim.pml(phangorn::pml(myloplus.tr, phangorn::as.phyDat(myloplus.aligned), k=4, inv=0, model="HKY"), optNni=TRUE, optGamma=TRUE, optInv=FALSE, model="HKY")
+myloplus.tr <- nj(dist.dna(myloplus.aligned,model="TN93",pairwise.deletion=TRUE))
+myloplus.tr.ml <- phangorn::optim.pml(phangorn::pml(myloplus.tr, phangorn::as.phyDat(myloplus.aligned), k=4, inv=0, model="HKY"), optNni=FALSE, optGamma=TRUE, optInv=FALSE, model="HKY")#rearrangement="stochastic",
 
 # ladderize tree
 myloplus.tr <- ladderize(midpoint(myloplus.tr.ml$tree))
@@ -174,7 +190,7 @@ p <- myloplus.tr %>%
     xlim(0,0.35)
 
 # plot
-ggsave(filename=here("temp/myloplus.tr.oct.pdf"),plot=p,width=297,height=2500,units="mm",limitsize=FALSE)
+ggsave(filename=here("temp/myloplus.tr.nov.pdf"),plot=p,width=297,height=2500,units="mm",limitsize=FALSE)
 
 
 

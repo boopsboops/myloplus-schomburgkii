@@ -70,3 +70,38 @@ write.nexus.data(seqs.fas.red.ali,here("temp-local-only/myloplus-209x664-aligned
 
 # mb commands
 #mpirun -np 4 mb myloplus-209x664-aligned-2022-11-07-mb.nex
+
+### load trees and sample ###
+
+# fun to load mrbayes trees
+read_t <- function(basename,run,burnin){    
+    tree.file.name <- paste0(basename,run,".t")
+    mrbayes.trees <- ape::read.nexus(here(tree.file.name))
+    mrbayes.trees.burnin <- mrbayes.trees[burnin:length(mrbayes.trees)]
+    return(mrbayes.trees.burnin)
+}
+
+# test
+#read_t(basename="temp-local-only/myloplus-209x664-aligned.nex.run",run=1,burnin=102)
+
+# load four runs
+nruns <- 1:4
+all.runs <- mapply(function(x) read_t(basename="temp-local-only/myloplus-209x664-aligned.nex.run",run=x,burnin=102),x=nruns,SIMPLIFY=FALSE,USE.NAMES=FALSE)
+
+# join
+all.runs.joined <- do.call(c,all.runs)
+
+# sample
+set.seed(42)
+all.runs.joined.sample <- sample(all.runs.joined,1000)
+
+# name the trees
+trees.names <- paste0("tree",str_pad(1:length(all.runs.joined.sample),width=4,pad="0"))
+
+# write out the trees
+mapply(function(x,y) ape::write.tree(x,file=here("temp-local-only","mptp",paste0(y,".nwk"))),x=all.runs.joined.sample,y=trees.names)
+
+
+
+
+

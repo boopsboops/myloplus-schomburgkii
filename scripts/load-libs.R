@@ -13,6 +13,7 @@ library("traits")
 library("lubridate")
 library("glue")
 library("parallel")
+library("openssl")
 
 # load funs
 source("https://raw.githubusercontent.com/boopsboops/UTILITIES/master/RScripts/hapCollapse.R")

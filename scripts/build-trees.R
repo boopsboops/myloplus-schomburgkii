@@ -95,11 +95,21 @@ all.runs.joined <- do.call(c,all.runs)
 set.seed(42)
 all.runs.joined.sample <- sample(all.runs.joined,1000)
 
+# root and ladderise trees
+all.runs.joined.sample.rooted <- mapply(function(x) ape::ladderize(phangorn::midpoint(x)), x=all.runs.joined.sample,SIMPLIFY=FALSE,USE.NAMES=FALSE)
+
+plot(all.runs.joined.sample.rooted[[1]])
+
 # name the trees
-trees.names <- paste0("tree",str_pad(1:length(all.runs.joined.sample),width=4,pad="0"))
+trees.names <- paste0("tree",str_pad(1:length(all.runs.joined.sample.rooted),width=4,pad="0"))
 
 # write out the trees
-mapply(function(x,y) ape::write.tree(x,file=here("temp-local-only","mptp",paste0(y,".nwk"))),x=all.runs.joined.sample,y=trees.names)
+mapply(function(x,y) ape::write.tree(x,file=here("temp-local-only","mptp",paste0(y,".nwk"))),x=all.runs.joined.sample.rooted,y=trees.names)
+
+# also write out a multiphylo to view
+class(all.runs.joined.sample.rooted) <- "multiPhylo"
+ape::write.tree(all.runs.joined.sample.rooted,here("temp-local-only/all.runs.joined.sample.rooted.nwk"))
+
 
 
 

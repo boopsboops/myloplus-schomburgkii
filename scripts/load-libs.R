@@ -14,6 +14,7 @@ library("lubridate")
 library("glue")
 library("parallel")
 library("openssl")
+library("RColorBrewer")
 
 # load funs
 source("https://raw.githubusercontent.com/boopsboops/UTILITIES/master/RScripts/hapCollapse.R")
@@ -21,3 +22,6 @@ source("https://raw.githubusercontent.com/boopsboops/UTILITIES/master/RScripts/t
 source("https://raw.githubusercontent.com/boopsboops/UTILITIES/master/RScripts/haps2fas.R")
 source("https://raw.githubusercontent.com/boopsboops/UTILITIES/master/RScripts/hap_collapse_df.R")
 source("https://raw.githubusercontent.com/boopsboops/UTILITIES/master/RScripts/get_sames.R")
+source("https://raw.githubusercontent.com/boopsboops/UTILITIES/master/RScripts/run_mptp.R")
+source("https://raw.githubusercontent.com/boopsboops/UTILITIES/master/RScripts/read_mptp.R")
+source("https://raw.githubusercontent.com/boopsboops/UTILITIES/master/RScripts/read_t.R")

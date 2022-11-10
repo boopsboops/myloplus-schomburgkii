@@ -136,15 +136,15 @@ all.runs.joined.sample.rooted <- mapply(function(x) ape::ladderize(phangorn::mid
 trees.names <- paste0("tree",str_pad(1:length(all.runs.joined.sample.rooted),width=4,pad="0"))
 
 # write out the trees
-mapply(function(x,y) ape::write.tree(x,file=here("temp-local-only","mptp",paste0(y,".nwk"))),x=all.runs.joined.sample.rooted,y=trees.names)
+mapply(function(x,y) ape::write.tree(x,file=here("temp-local-only","2022-11-10","mptp",paste0(y,".nwk"))),x=all.runs.joined.sample.rooted,y=trees.names)
 
 # also write out a multiphylo to view
-class(all.runs.joined.sample.rooted) <- "phylo"
-ape::write.tree(all.runs.joined.sample.rooted,file=here("temp-local-only/all.runs.joined.sample.rooted.nwk"))
-ape::write.nexus(all.runs.joined.sample.rooted,file=here("temp-local-only/all.runs.joined.sample.rooted.trees"))
+class(all.runs.joined.sample.rooted) <- "multiPhylo"
+ape::write.tree(all.runs.joined.sample.rooted,file=here("temp-local-only/2022-11-10/all.runs.joined.sample.rooted.nwk"))
+ape::write.nexus(all.runs.joined.sample.rooted,file=here("temp-local-only/2022-11-10/all.runs.joined.sample.rooted.trees"))
 
 # to make mcc tree (need to make function)
-#treeannotator -burninTrees 0 -heights ca temp-local-only/all.runs.joined.sample.rooted.trees temp-local-only/all.runs.joined.sample.rooted.mcc.tre
+#treeannotator -burninTrees 0 -heights ca temp-local-only/2022-11-10/all.runs.joined.sample.rooted.trees temp-local-only/2022-11-10/all.runs.joined.sample.rooted.mcc.tre
 
 
 ### GET MPTP FOR MCC TREE ###

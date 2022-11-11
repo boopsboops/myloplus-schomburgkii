@@ -3,93 +3,19 @@
 ### LOAD LIBS ###
 source(here::here("scripts/load-libs.R"))
 
-
-### MAKE A QUICK TREE ###
-
-# load data
-seqs.fas <- read.FASTA("assets/sequences-master.fasta")
-master.df <- read_csv(here("assets/tissues-master.csv"),show_col_types=FALSE)
-# check
-base::setdiff(labels(seqs.fas),pull(master.df,label))
-base::setdiff(pull(master.df,label),labels(seqs.fas))
-
-# align
-myloplus.aligned <- as.matrix(ips::mafft(seqs.fas,exec="mafft"))
-
-# make a tree
-myloplus.tr <- nj(dist.dna(myloplus.aligned,model="TN93",pairwise.deletion=TRUE))
-myloplus.tr.ml <- phangorn::optim.pml(phangorn::pml(myloplus.tr, phangorn::as.phyDat(myloplus.aligned), k=4, inv=0, model="HKY"), optNni=FALSE, optGamma=TRUE, optInv=FALSE, model="HKY")#rearrangement="stochastic",
-
-# ladderize tree
-myloplus.tr <- ladderize(midpoint(myloplus.tr.ml$tree))
-myloplus.tr$edge.length[which(myloplus.tr$edge.length < 0)] <- 0
-
-# make plotting labels
-master.df.labs <- master.df %>% 
-    mutate(sciName=if_else(is.na(identificationQualifier),paste(genus,specificEpithet),paste(genus,identificationQualifier))) %>% 
-    mutate(labsPhy=paste(label,sciName,waterBody,sep=" | ")) %>%
-    select(label,labsPhy)
-
-# plot tree
-p <- myloplus.tr %>% 
-    ggtree(color="grey50") %<+% master.df.labs +
-    geom_tiplab(aes(label=labsPhy),geom="text",offset=0.0005,align=TRUE,color="grey50") + 
-    theme(legend.position="none") +
-    xlim(0,0.35)
-
-# plot
-filename <- glue("temp/myloplus.tr.",as.character(Sys.Date()),".pdf")
-ggsave(filename=here(filename),plot=p,width=297,height=2500,units="mm",limitsize=FALSE)
-
-
-### DEREPLICATE SEQUENCES ###
-
-# load data
-seqs.fas <- read.FASTA("assets/sequences-master.fasta")
-master.df <- read_csv(here("assets/tissues-master.csv"),show_col_types=FALSE)
-
-# convert fas to tab
-seqs.fas.df <- fas2tab(seqs.fas) %>% 
-    rename(nucleotidesFrag=nucleotides) %>% 
-    mutate(lengthFrag=str_length(nucleotidesFrag))
-
-# format for derep
-master.df %<>% 
-    left_join(seqs.fas.df ) %>%
-    mutate(sciNameValid=if_else(is.na(identificationQualifier),paste(genus,specificEpithet),paste(genus,identificationQualifier))) %>%
-    mutate(dbid=label,dbidNex=glue("dbid_{label}"))# old way = paste0("dbid_",label)
-
-# collapse
-master.df.red <- haps2fas(df=master.df)
-glimpse(master.df.red)
-# write out
-#write_csv(master.df.red,here("temp-local-only/myloplus-209x664-aligned.csv"))
-
-# make labels and align
-seqs.fas.red <- tab2fas(df=master.df.red,seqcol="nucleotidesFrag",namecol="dbidNex")
-seqs.fas.red.ali <- as.matrix(ips::mafft(seqs.fas.red,exec="mafft"))
-
-# trim the alignment
-dim(seqs.fas.red.ali)
-seqs.fas.red.ali.trim <- seqs.fas.red.ali[,44:664]
-dim(seqs.fas.red.ali.trim)
-
-# write out nexus
-write.nexus.data(seqs.fas.red.ali.trim,here("temp-local-only/myloplus-209x621-aligned.nex"),interleaved=FALSE)
-# write out fasta
-write.FASTA(seqs.fas.red.ali.trim,here("temp-local-only/myloplus-209x621-aligned.fasta"))
-
-
-### RUN MRBAYES ### [need to write function]
-
-# mb commands
-#mpirun -np 4 mb myloplus-209x621-aligned-2022-11-10-mb.nex
+# set output dir
+outdir <- "2022-11-11-lambda10"
+dir.create(here("temp-local-only",outdir))
 
 
 ### RUN RAXML NG ###
 
-rax.tr <- raxml_align(file=here("temp-local-only/myloplus-209x621-aligned.fasta"),align=FALSE,model="GTR+G",epsilon=0.01)
-rax.tr.root <- ladderize(midpoint(rax.tr))
+#load df
+master.df.red <- read_csv(here("temp/alignments/myloplus-209.csv"),show_col_types=FALSE)
+
+# run rax
+rax.tr <- raxml_align(file=here("temp-local-only",outdir,"myloplus-209x621-aligned.fasta"),align=FALSE,model="GTR+G",epsilon=0.01)
+rax.tr.root <- ape::ladderize(phangorn::midpoint(rax.tr))
 
 # plot labels
 master.df.ml <- master.df.red %>% 
@@ -104,24 +30,78 @@ p <- rax.tr.root %>%
     xlim(0,0.4)
 
 # plot
-filename <- glue("temp-local-only/myloplus-209x621-aligned.",as.character(Sys.Date()),".pdf")
+filename <- glue("temp/trees/myloplus.tr.ml.",as.character(Sys.Date()),".pdf")
 ggsave(filename=here(filename),plot=p,width=297,height=1000,units="mm",limitsize=FALSE)
 
 
+### RUN MRBAYES IN TERMINAL ### 
 
+# mb commands
+# mpirun -np 4 mb myloplus-209x621.mb
+# chain ((1000000/360)*4)*0.9 = 10k
+# burnin ((2779-280)*4) = 10k
 
-
-### LOAD TREES AND SAMPLE ###
+### LOAD MRBAYES TREES AND SUBSAMPLE ###
 
 # test
 #read_t(basename="temp-local-only/2022-11-10/myloplus-209x621-aligned.nex.run",run=1,burnin=102)
 
 # load four runs
 nruns <- 1:4
-all.runs <- mapply(function(x) read_t(basename="temp-local-only/2022-11-10/myloplus-209x621-aligned.nex.run",run=x,burnin=102),x=nruns,SIMPLIFY=FALSE,USE.NAMES=FALSE)
+# burnin
+all.runs <- mapply(function(x) read_t(basename=paste("temp-local-only",outdir,"myloplus-209x621-aligned.nex.run",sep="/"),run=x,burnin=280),x=nruns,SIMPLIFY=FALSE,USE.NAMES=FALSE)
 
 # join
 all.runs.joined <- do.call(c,all.runs)
+
+# write out 10k trees for annotate
+ape::write.nexus(all.runs.joined,file=here("temp-local-only",outdir,"all.runs.joined.trees"))
+
+# get paths for consensus
+trees.path <- here("temp-local-only",outdir,"all.runs.joined.trees")
+mcc.path <- here("temp-local-only",outdir,"all.runs.joined.mcc.tre")
+
+# run
+tree_annotator(infile=trees.path,outfile=mcc.path)
+
+# plot to check mcc
+
+# read mcc tree
+master.df.red <- read_csv(here("temp/alignments/myloplus-209.csv"),show_col_types=FALSE)
+mcc.tre <- read.nexus(here("temp-local-only",outdir,"all.runs.joined.mcc.tre"))
+# root
+mcc.tre <- ape::ladderize(phangorn::midpoint(mcc.tre))
+
+# test tree length
+#    lam1 <- mcc.tre
+#    lam10 <- mcc.tre
+#    lam100 <- mcc.tre
+#    ml <- rax.tr.root
+#    sum(ml$edge.length)
+#    sum(lam1$edge.length)
+#    sum(lam10$edge.length)
+#    sum(lam100$edge.length)
+#    plot(density(ml$edge.length))
+#    lines(density(lam1$edge.length),col="blue")
+#    lines(density(lam10$edge.length),col="red")
+#    lines(density(lam100$edge.length),col="green")
+
+# format labels
+master.df.mcc <- master.df.red %>% 
+    mutate(labsPhy=paste(label,sciNameValid,waterBody,nHaps,sep="|")) %>%
+    select(dbidNex,labsPhy)
+
+# gg
+p <- mcc.tre %>% 
+    ggtree(color="grey50") %<+% master.df.mcc +
+    geom_tiplab(aes(label=labsPhy),geom="text",align=TRUE,color="grey50",offset=0.005,size=3.5) +
+    theme(legend.position="none") +
+    xlim(0,0.4)
+
+# plot
+filename <- glue("temp/trees/myloplus.tr.mcc.",as.character(Sys.Date()),".lambda100.pdf")
+ggsave(filename=here(filename),plot=p,width=297,height=1000,units="mm",limitsize=FALSE)
+
 
 # sample
 set.seed(42)
@@ -136,28 +116,29 @@ all.runs.joined.sample.rooted <- mapply(function(x) ape::ladderize(phangorn::mid
 trees.names <- paste0("tree",str_pad(1:length(all.runs.joined.sample.rooted),width=4,pad="0"))
 
 # write out the trees
-mapply(function(x,y) ape::write.tree(x,file=here("temp-local-only","2022-11-10","mptp",paste0(y,".nwk"))),x=all.runs.joined.sample.rooted,y=trees.names)
+dir.create(here("temp-local-only",outdir,"mptp"))
+mapply(function(x,y) ape::write.tree(x,file=here("temp-local-only",outdir,"mptp",paste0(y,".nwk"))),x=all.runs.joined.sample.rooted,y=trees.names)
 
 # also write out a multiphylo to view
 class(all.runs.joined.sample.rooted) <- "multiPhylo"
-ape::write.tree(all.runs.joined.sample.rooted,file=here("temp-local-only/2022-11-10/all.runs.joined.sample.rooted.nwk"))
-ape::write.nexus(all.runs.joined.sample.rooted,file=here("temp-local-only/2022-11-10/all.runs.joined.sample.rooted.trees"))
+ape::write.tree(all.runs.joined.sample.rooted,file=here("temp-local-only",outdir,"all.runs.joined.sample.rooted.nwk"))
+ape::write.nexus(all.runs.joined.sample.rooted,file=here("temp-local-only",outdir,"all.runs.joined.sample.rooted.trees"))
 
-# to make mcc tree (need to make function)
-#treeannotator -burninTrees 0 -heights ca temp-local-only/2022-11-10/all.runs.joined.sample.rooted.trees temp-local-only/2022-11-10/all.runs.joined.sample.rooted.mcc.tre
 
 
 ### GET MPTP FOR MCC TREE ###
 
 # load up reduced annotated df and mcc tree
-master.df.red <- read_csv(here("temp-local-only/myloplus-209x664-aligned.csv"),show_col_types=FALSE)
-mcc.tre <- read.nexus("temp-local-only/all.runs.joined.sample.rooted.mcc.tre")
+master.df.red <- read_csv(here("temp/alignments/myloplus-209.csv"),show_col_types=FALSE)
+mcc.tre <- read.nexus(here("temp-local-only",outdir,"all.runs.joined.mcc.tre"))
+mcc.tre <- ape::ladderize(phangorn::midpoint(mcc.tre))
+
 # save as nwk
-#ape::write.tree(mcc.tre,file=here("temp-local-only/mcc.nwk"))
+ape::write.tree(mcc.tre,file=here("temp-local-only",outdir,"mcc.nwk"))
 
 # get mptp for consensus tree and load data
-run_mptp(file=here("temp-local-only/mcc.nwk"),threshold="single",minbr=0.0001)
-mcc.mptp.out <- read_mptp(file=here("temp-local-only/mcc.nwk.mptp.out.txt"))
+run_mptp(file=here("temp-local-only",outdir,"mcc.nwk"),threshold="single",minbr=0.0001)
+mcc.mptp.out <- read_mptp(file=here("temp-local-only",outdir,"mcc.nwk.mptp.out.txt"))
 
 # get hashes of sets
 mcc.mptp.out.hash <- mcc.mptp.out %>% 
@@ -172,14 +153,14 @@ mcc.mptp.out.hash <- mcc.mptp.out %>%
 
 # run mptp in parallel
 # get tree names
-mptp.nwk.trees <- list.files(here("temp-local-only/mptp"),pattern=".nwk",full.names=TRUE)
+mptp.nwk.trees <- list.files(here("temp-local-only",outdir,"mptp"),pattern=".nwk",full.names=TRUE)
 
 # run parallel
-mcmapply(function(x) run_mptp(file=x,threshold="single",minbr=0.0001),x=mptp.nwk.trees,mc.cores=2)
+mcmapply(function(x) run_mptp(file=x,threshold="single",minbr=0.0001),x=mptp.nwk.trees,mc.cores=4)
 
 # read in parallel
-mptp.nwk.out <- list.files(here("temp-local-only/mptp"),pattern=".txt",full.names=TRUE)
-mptp.nwk.out.df <- mcmapply(function(x) read_mptp(file=x),x=mptp.nwk.out,SIMPLIFY=FALSE,USE.NAMES=FALSE,mc.cores=2)
+mptp.nwk.out <- list.files(here("temp-local-only",outdir,"mptp"),pattern=".txt",full.names=TRUE)
+mptp.nwk.out.df <- mcmapply(function(x) read_mptp(file=x),x=mptp.nwk.out,SIMPLIFY=FALSE,USE.NAMES=FALSE,mc.cores=4)
 
 # join dataframes
 mptp.nwk.out.df.joined <- bind_rows(mptp.nwk.out.df)
@@ -237,10 +218,18 @@ master.df.plot.mat <- as.matrix(master.df.plot.mat)
 
 # discrete cols
 getPalette <- colorRampPalette(brewer.pal(9, "Set1"))
-set.seed(4242)
+set.seed(6)
 cols <- sample(getPalette(n=length(as.character(unique(pull(master.df.plot,labelHash))))))
 
+# load tree
+mcc.tre.beast <- treeio::read.beast(here("temp-local-only",outdir,"all.runs.joined.mcc.tre"))
+#mcc.tre.beast <- ape::ladderize(phangorn::midpoint(mcc.tre.beast))
+ggtree(mcc.tre.beast) + geom_nodepoint(aes(subset >70))
+#https://github.com/YuLab-SMU/ggtree/issues/89
+
 # plot tree
+# https://yulab-smu.top/treedata-book/
+
 p <- mcc.tre %>% 
     ggtree(color="grey50") %<+% master.df.plot +
     geom_tiplab(aes(label=labsPhy),geom="text",align=TRUE,color="grey50",offset=0.005,size=3.5) +
@@ -256,8 +245,27 @@ p <- gheatmap(p=p, data=master.df.plot.mat, offset=0.08, width=0.08) +
 #plot(p)
 
 # plot
-filename <- glue("temp/myloplus.tr.mcc.",as.character(Sys.Date()),".pdf")
+filename <- glue("temp/trees/myloplus.tr.mptp.",as.character(Sys.Date()),".pdf")
 ggsave(filename=here(filename),plot=p,width=297,height=1000,units="mm",limitsize=FALSE)
+
+
+### HYPOTHESES SUPPORT ###
+# load table of clades
+clades.df <- read_csv(here("temp/alignments/clades-test.csv"),show_col_types=FALSE)
+
+# add post probs
+clades.pp <- clades.df %>%
+    arrange(clade,dbidNex) %>% 
+    group_by(clade) %>% 
+    mutate(labelCat=paste(dbidNex,collapse="|"),labelHash=openssl::md5(labelCat)) %>%
+    ungroup() %>%
+    distinct(clade,labelHash) %>%
+    left_join(post.probs) %>%
+    select(clade,postProb)
+
+#clades.pp %>% write_csv(here("temp/alignments/clades-results.csv"))
+
+
 
 
 

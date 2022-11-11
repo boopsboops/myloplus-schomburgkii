@@ -25,3 +25,5 @@ source("https://raw.githubusercontent.com/boopsboops/UTILITIES/master/RScripts/g
 source("https://raw.githubusercontent.com/boopsboops/UTILITIES/master/RScripts/run_mptp.R")
 source("https://raw.githubusercontent.com/boopsboops/UTILITIES/master/RScripts/read_mptp.R")
 source("https://raw.githubusercontent.com/boopsboops/UTILITIES/master/RScripts/read_t.R")
+source("https://raw.githubusercontent.com/boopsboops/UTILITIES/master/RScripts/raxml_ng.R")
+source("https://raw.githubusercontent.com/boopsboops/UTILITIES/master/RScripts/tree_annotator.R")

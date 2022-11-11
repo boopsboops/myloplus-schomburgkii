@@ -54,12 +54,15 @@ all.runs <- mapply(function(x) read_t(basename=paste("temp-local-only",outdir,"m
 # join
 all.runs.joined <- do.call(c,all.runs)
 
+# root
+all.runs.joined.rooted <- mcmapply(function(x) phangorn::midpoint(x), x=all.runs.joined,SIMPLIFY=FALSE,USE.NAMES=FALSE,mc.cores=4)
+
 # write out 10k trees for annotate
-ape::write.nexus(all.runs.joined,file=here("temp-local-only",outdir,"all.runs.joined.trees"))
+ape::write.nexus(all.runs.joined.rooted,file=here("temp-local-only",outdir,"all.runs.joined.rooted.trees"))
 
 # get paths for consensus
-trees.path <- here("temp-local-only",outdir,"all.runs.joined.trees")
-mcc.path <- here("temp-local-only",outdir,"all.runs.joined.mcc.tre")
+trees.path <- here("temp-local-only",outdir,"all.runs.joined.rooted.trees")
+mcc.path <- here("temp-local-only",outdir,"all.runs.joined.rooted.mcc.tre")
 
 # run
 tree_annotator(infile=trees.path,outfile=mcc.path)
@@ -68,9 +71,9 @@ tree_annotator(infile=trees.path,outfile=mcc.path)
 
 # read mcc tree
 master.df.red <- read_csv(here("temp/alignments/myloplus-209.csv"),show_col_types=FALSE)
-mcc.tre <- read.nexus(here("temp-local-only",outdir,"all.runs.joined.mcc.tre"))
+mcc.tre <- read.nexus(here("temp-local-only",outdir,"all.runs.joined.rooted.mcc.tre"))
 # root
-mcc.tre <- ape::ladderize(phangorn::midpoint(mcc.tre))
+#mcc.tre <- ape::ladderize(phangorn::midpoint(mcc.tre))
 
 # test tree length
 #    lam1 <- mcc.tre
@@ -222,9 +225,15 @@ set.seed(6)
 cols <- sample(getPalette(n=length(as.character(unique(pull(master.df.plot,labelHash))))))
 
 # load tree
-mcc.tre.beast <- treeio::read.beast(here("temp-local-only",outdir,"all.runs.joined.mcc.tre"))
+mcc.tre.beast <- treeio::read.beast(here("temp-local-only",outdir,"all.runs.joined.rooted.mcc.tre"))
 #mcc.tre.beast <- ape::ladderize(phangorn::midpoint(mcc.tre.beast))
-ggtree(mcc.tre.beast) + geom_nodepoint(aes(subset >70))
+str(mcc.tre.beast)
+mcc.tre.beast@data$posterior
+
+p <- mcc.tre.beast %>% 
+    ggtree() + geom_nodepoint(aes(subset=posterior > 0.95)) +
+    geom_nodelab(aes(posterior))
+p
 #https://github.com/YuLab-SMU/ggtree/issues/89
 
 # plot tree

@@ -15,6 +15,7 @@ library("glue")
 library("parallel")
 library("openssl")
 library("RColorBrewer")
+library("randomcoloR")
 
 # load funs
 source("https://raw.githubusercontent.com/boopsboops/UTILITIES/master/RScripts/hapCollapse.R")

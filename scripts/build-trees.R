@@ -4,7 +4,7 @@
 source(here::here("scripts/load-libs.R"))
 
 # set output dir
-outdir <- "2022-11-12-ml"
+outdir <- "2022-11-12-default"
 #outdir <- "2022-11-12-ml"
 dir.create(here("temp-local-only",outdir))
 
@@ -50,7 +50,7 @@ ggsave(filename=here(filename),plot=p,width=297,height=1000,units="mm",limitsize
 # load four runs
 nruns <- 1:4
 # burnin
-all.runs <- mapply(function(x) read_t(basename=paste("temp-local-only",outdir,"myloplus-209x621-aligned.nex.run",sep="/"),run=x,burnin=280),x=nruns,SIMPLIFY=FALSE,USE.NAMES=FALSE)
+all.runs <- mcmapply(function(x) read_t(basename=paste("temp-local-only",outdir,"myloplus-209x621-aligned.nex.run",sep="/"),run=x,burnin=280),x=nruns,SIMPLIFY=FALSE,USE.NAMES=FALSE,mc.cores=4)
 
 # join
 all.runs.joined <- do.call(c,all.runs)
@@ -81,38 +81,32 @@ master.df.mcc <- master.df.red %>%
     mutate(labsPhy=paste(label,sciNameValid,waterBody,nHaps,sep="|")) %>%
     select(dbidNex,labsPhy)
 
-# gg
+# ggtree to check topology
 p <- mcc.tre %>% 
-    ggtree(color="grey50") %<+% master.df.mcc +
+    ggtree(color="grey50",ladderize=TRUE) %<+% master.df.mcc +
     geom_tiplab(aes(label=labsPhy),geom="text",align=TRUE,color="grey50",offset=0.005,size=3.5) +
     theme(legend.position="none") +
-    xlim(0,0.4)
+    xlim(0,0.25)
 
 # plot
-filename <- glue("temp/trees/myloplus.tr.mcc.",as.character(Sys.Date()),".gamma0.1.pdf")
+filename <- glue("temp/trees/myloplus.tr.mcc.",as.character(Sys.Date()),".default.pdf")
 ggsave(filename=here(filename),plot=p,width=297,height=1000,units="mm",limitsize=FALSE)
-
 
 # sample
 set.seed(42)
-all.runs.joined.sample <- sample(all.runs.joined,1000)
-
-# root and ladderise trees
-all.runs.joined.sample.rooted <- mapply(function(x) ape::ladderize(phangorn::midpoint(x)), x=all.runs.joined.sample,SIMPLIFY=FALSE,USE.NAMES=FALSE)
-
-#plot(all.runs.joined.sample.rooted[[1]])
+all.runs.joined.rooted.sample <- sample(all.runs.joined.rooted,1000)
 
 # name the trees
-trees.names <- paste0("tree",str_pad(1:length(all.runs.joined.sample.rooted),width=4,pad="0"))
+trees.names <- paste0("tree",str_pad(1:length(all.runs.joined.rooted.sample),width=4,pad="0"))
 
 # write out the trees
 dir.create(here("temp-local-only",outdir,"mptp"))
-mapply(function(x,y) ape::write.tree(x,file=here("temp-local-only",outdir,"mptp",paste0(y,".nwk"))),x=all.runs.joined.sample.rooted,y=trees.names)
+mapply(function(x,y) ape::write.tree(x,file=here("temp-local-only",outdir,"mptp",paste0(y,".nwk"))),x=all.runs.joined.rooted.sample,y=trees.names)
 
 # also write out a multiphylo to view
-class(all.runs.joined.sample.rooted) <- "multiPhylo"
-ape::write.tree(all.runs.joined.sample.rooted,file=here("temp-local-only",outdir,"all.runs.joined.sample.rooted.nwk"))
-ape::write.nexus(all.runs.joined.sample.rooted,file=here("temp-local-only",outdir,"all.runs.joined.sample.rooted.trees"))
+class(all.runs.joined.rooted.sample) <- "multiPhylo"
+ape::write.tree(all.runs.joined.rooted.sample,file=here("temp-local-only",outdir,"all.runs.joined.rooted.sample.nwk"))
+ape::write.nexus(all.runs.joined.rooted.sample,file=here("temp-local-only",outdir,"all.runs.joined.rooted.sample.trees"))
 
 
 
@@ -120,14 +114,13 @@ ape::write.nexus(all.runs.joined.sample.rooted,file=here("temp-local-only",outdi
 
 # load up reduced annotated df and mcc tree
 master.df.red <- read_csv(here("temp/alignments/myloplus-209.csv"),show_col_types=FALSE)
-mcc.tre <- read.nexus(here("temp-local-only",outdir,"all.runs.joined.mcc.tre"))
-mcc.tre <- ape::ladderize(phangorn::midpoint(mcc.tre))
+mcc.tre <- read.nexus(here("temp-local-only",outdir,"all.runs.joined.rooted.mcc.tre"))
 
 # save as nwk
 ape::write.tree(mcc.tre,file=here("temp-local-only",outdir,"mcc.nwk"))
 
 # get mptp for consensus tree and load data
-run_mptp(file=here("temp-local-only",outdir,"mcc.nwk"),threshold="single",minbr=0.0001)
+run_mptp(file=here("temp-local-only",outdir,"mcc.nwk"),threshold="single",minbr=0)#minbr=0.0001
 mcc.mptp.out <- read_mptp(file=here("temp-local-only",outdir,"mcc.nwk.mptp.out.txt"))
 
 # get hashes of sets
@@ -146,7 +139,7 @@ mcc.mptp.out.hash <- mcc.mptp.out %>%
 mptp.nwk.trees <- list.files(here("temp-local-only",outdir,"mptp"),pattern=".nwk",full.names=TRUE)
 
 # run parallel
-mcmapply(function(x) run_mptp(file=x,threshold="single",minbr=0.0001),x=mptp.nwk.trees,mc.cores=4)
+mcmapply(function(x) run_mptp(file=x,threshold="single",minbr=0),x=mptp.nwk.trees,mc.cores=4)#minbr=0.0001
 
 # read in parallel
 mptp.nwk.out <- list.files(here("temp-local-only",outdir,"mptp"),pattern=".txt",full.names=TRUE)
@@ -171,11 +164,12 @@ mptp.nwk.out.df.joined.hash.summary <- mptp.nwk.out.df.joined.hash %>%
     ungroup()
 
 # plot n delims
-mptp.nwk.out.df.joined.hash.summary %>% 
+p <- mptp.nwk.out.df.joined.hash.summary %>% 
     distinct(rep,nDelim) %>%
     ggplot(aes(nDelim)) + 
         #geom_histogram(binwidth=1)
         geom_density()
+# plot(p)
 
 
 ### GET POST CLADE PROBS ###
@@ -193,56 +187,61 @@ post.probs.label <- mcc.mptp.out.hash %>%
 # join to metadata df
 master.df.red.probs <- master.df.red %>% left_join(post.probs.label)
 glimpse(master.df.red.probs)
+#master.df.red.probs %>% write_csv(here("temp/alignments/myloplus-209-mptp.csv"))
 
 
-### PLOT ###
+### PLOT WITH APLOT ###
+
+# load up previously saved data
+master.df.red.probs <- read_csv(here("temp/alignments/myloplus-209-mptp.csv"),show_col_types=FALSE)
+
+# load tree
+mcc.tre.beast <- treeio::read.beast(here("temp-local-only",outdir,"all.runs.joined.rooted.mcc.tre"))
 
 # make df for plotting
 master.df.plot <- master.df.red.probs %>% 
     mutate(labsPhy=paste(label,sciNameValid,waterBody,nHaps,sep="|")) %>%
     select(dbidNex,labsPhy,labelHash,postProb)
 
-master.df.plot.mat <- master.df.plot %>% select(postProb) %>% data.frame()
-rownames(master.df.plot.mat) <- pull(master.df.plot,dbidNex)
-master.df.plot.mat <- as.matrix(master.df.plot.mat)
+# colours with randomcoloR
+set.seed(11)
+cols <- randomcoloR::distinctColorPalette(k=ncols)
 
-# discrete cols
-getPalette <- colorRampPalette(brewer.pal(9, "Set1"))
-set.seed(6)
-cols <- sample(getPalette(n=length(as.character(unique(pull(master.df.plot,labelHash))))))
-
-# load tree
-mcc.tre.beast <- treeio::read.beast(here("temp-local-only",outdir,"all.runs.joined.rooted.mcc.tre"))
-#mcc.tre.beast <- ape::ladderize(phangorn::midpoint(mcc.tre.beast))
-str(mcc.tre.beast)
-mcc.tre.beast@data$posterior
-
-p <- mcc.tre.beast %>% 
-    ggtree() + geom_nodepoint(aes(subset=posterior > 0.95)) +
-    geom_nodelab(aes(posterior))
-p
-#https://github.com/YuLab-SMU/ggtree/issues/89
-
-# plot tree
+# tree
 # https://yulab-smu.top/treedata-book/
-
-p <- mcc.tre %>% 
-    ggtree(color="grey50") %<+% master.df.plot +
-    geom_tiplab(aes(label=labsPhy),geom="text",align=TRUE,color="grey50",offset=0.005,size=3.5) +
-    geom_tippoint(aes(color=as.character(labelHash))) +
+mcc.p <- mcc.tre.beast %>% 
+    ggtree(color="grey40",ladderize=TRUE,right=TRUE) %<+% master.df.plot +
+    geom_tiplab(aes(label=labsPhy),geom="text",align=TRUE,color="grey40",offset=0.005,size=4) +
+    geom_tippoint(aes(color=as.character(labelHash)),size=2.5) +
+    geom_nodepoint(aes(subset=posterior > 0.95),color="grey40",size=1) +
     scale_color_manual(values=cols) +
     theme(legend.position="none") +
-    xlim(0,0.25)
+    xlim(0,0.24)
 
-# add heatmap
-p <- gheatmap(p=p, data=master.df.plot.mat, offset=0.08, width=0.08) +
-    theme(legend.position="none") +
-    scale_fill_continuous(type="gradient",trans="reverse")
-#plot(p)
+# bar plot
+post.probs.plot <- master.df.plot %>% 
+    ggplot(aes(y=postProb,x=dbidNex)) + 
+    geom_col(fill="grey90") + 
+    geom_point(aes(color=as.character(labelHash)),shape=15,size=2.5) + 
+    scale_color_manual(values=cols) +
+    coord_flip() +
+    theme_minimal() +
+    scale_y_continuous(sec.axis=dup_axis()) +
+    ylab("Posterior probability") +
+    theme(legend.position="none",
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        panel.grid.major.y=element_blank(),
+        panel.grid.minor.x=element_blank(),
+        panel.grid.major.x=element_line(size=0.5,linetype=2)
+        )
 
-# plot
+# join plots
+plots.joined <- post.probs.plot %>% aplot::insert_left(mcc.p,width=5)
+
 filename <- glue("temp/trees/myloplus.tr.mptp.",as.character(Sys.Date()),".pdf")
-ggsave(filename=here(filename),plot=p,width=297,height=1000,units="mm",limitsize=FALSE)
+ggsave(filename=here(filename),plot=plots.joined,width=297,height=1000,units="mm",limitsize=FALSE)
 
 
 ### HYPOTHESES SUPPORT ###
@@ -259,6 +258,7 @@ clades.pp <- clades.df %>%
     left_join(post.probs) %>%
     select(clade,postProb)
 
+print(clades.pp)
 #clades.pp %>% write_csv(here("temp/alignments/clades-results.csv"))
 
 
@@ -325,6 +325,39 @@ exp(0.5)/((sum(ml.tree$edge.length)*621)/length(ml.tree$edge.length))
 # = 0.5
 
 
+### MATRIX HEATMAP VERSION ###
+master.df.plot.mat <- master.df.plot %>% select(postProb) %>% data.frame()
+rownames(master.df.plot.mat) <- pull(master.df.plot,dbidNex)
+master.df.plot.mat <- as.matrix(master.df.plot.mat)
+
+# discrete cols
+getPalette <- colorRampPalette(brewer.pal(9, "Set1"))
+set.seed(6)
+cols <- sample(getPalette(n=length(as.character(unique(pull(master.df.plot,labelHash))))))
+
+# load tree
+mcc.tre.beast <- treeio::read.beast(here("temp-local-only",outdir,"all.runs.joined.rooted.mcc.tre"))
+
+# plot tree
+# https://yulab-smu.top/treedata-book/
+p <- mcc.tre.beast %>% 
+    ggtree(color="grey50") %<+% master.df.plot +
+    geom_tiplab(aes(label=labsPhy),geom="text",align=TRUE,color="grey50",offset=0.005,size=3.5) +
+    geom_tippoint(aes(color=as.character(labelHash))) +
+    geom_nodepoint(aes(subset=posterior > 0.95),color="grey50",size=1) +
+    scale_color_manual(values=cols) +
+    theme(legend.position="none") +
+    xlim(0,0.25)
+
+# add heatmap
+p <- gheatmap(p=p, data=master.df.plot.mat, offset=0.08, width=0.08) +
+    theme(legend.position="none") +
+    scale_fill_continuous(type="gradient",trans="reverse")
+#plot(p)
+
+# plot
+filename <- glue("temp/trees/myloplus.tr.mptp.",as.character(Sys.Date()),".pdf")
+ggsave(filename=here(filename),plot=p,width=297,height=1000,units="mm",limitsize=FALSE)
 
 
 ### OLD TESTING ###

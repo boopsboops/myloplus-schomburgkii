@@ -4,7 +4,8 @@
 source(here::here("scripts/load-libs.R"))
 
 # set output dir
-outdir <- "2022-11-11-lambda10"
+outdir <- "2022-11-12-ml"
+#outdir <- "2022-11-12-ml"
 dir.create(here("temp-local-only",outdir))
 
 
@@ -15,7 +16,7 @@ master.df.red <- read_csv(here("temp/alignments/myloplus-209.csv"),show_col_type
 
 # run rax
 rax.tr <- raxml_align(file=here("temp-local-only",outdir,"myloplus-209x621-aligned.fasta"),align=FALSE,model="GTR+G",epsilon=0.01)
-rax.tr.root <- ape::ladderize(phangorn::midpoint(rax.tr))
+rax.tr.root <- phangorn::midpoint(rax.tr)
 
 # plot labels
 master.df.ml <- master.df.red %>% 
@@ -75,20 +76,6 @@ mcc.tre <- read.nexus(here("temp-local-only",outdir,"all.runs.joined.rooted.mcc.
 # root
 #mcc.tre <- ape::ladderize(phangorn::midpoint(mcc.tre))
 
-# test tree length
-#    lam1 <- mcc.tre
-#    lam10 <- mcc.tre
-#    lam100 <- mcc.tre
-#    ml <- rax.tr.root
-#    sum(ml$edge.length)
-#    sum(lam1$edge.length)
-#    sum(lam10$edge.length)
-#    sum(lam100$edge.length)
-#    plot(density(ml$edge.length))
-#    lines(density(lam1$edge.length),col="blue")
-#    lines(density(lam10$edge.length),col="red")
-#    lines(density(lam100$edge.length),col="green")
-
 # format labels
 master.df.mcc <- master.df.red %>% 
     mutate(labsPhy=paste(label,sciNameValid,waterBody,nHaps,sep="|")) %>%
@@ -102,7 +89,7 @@ p <- mcc.tre %>%
     xlim(0,0.4)
 
 # plot
-filename <- glue("temp/trees/myloplus.tr.mcc.",as.character(Sys.Date()),".lambda100.pdf")
+filename <- glue("temp/trees/myloplus.tr.mcc.",as.character(Sys.Date()),".gamma0.1.pdf")
 ggsave(filename=here(filename),plot=p,width=297,height=1000,units="mm",limitsize=FALSE)
 
 
@@ -277,10 +264,70 @@ clades.pp <- clades.df %>%
 
 
 
+### INVESTIGATE TREE LENGTHS ### 
+
+mcc.lambda.1 <- read.nexus(here("temp-local-only/2022-11-11-lambda1/all.runs.joined.mcc.tre"))
+mcc.lambda.10 <- read.nexus(here("temp-local-only/2022-11-11-lambda10/all.runs.joined.mcc.tre"))
+mcc.lambda.100 <- read.nexus(here("temp-local-only/2022-11-11-lambda100/all.runs.joined.mcc.tre"))
+mcc.lambda.1000 <- read.nexus(here("temp-local-only/2022-11-11-lambda1000/all.runs.joined.rooted.mcc.tre"))
+mcc.gamma.0.5 <- read.nexus(here("temp-local-only/2022-11-12-gamma0.5/all.runs.joined.rooted.mcc.tre"))
+mcc.gamma.1 <- read.nexus(here("temp-local-only/2022-11-12-gamma1/all.runs.joined.rooted.mcc.tre"))
+mcc.gamma.0.1 <- read.nexus(here("temp-local-only/2022-11-12-gamma0.1/all.runs.joined.rooted.mcc.tre"))
+
+
+ml.tree <- rax.tr.root 
+
+# test tree length
+sum(ml.tree$edge.length)
+sum(mcc.lambda.1$edge.length)
+sum(mcc.lambda.10$edge.length)
+sum(mcc.lambda.100$edge.length)
+sum(mcc.lambda.1000$edge.length)
+sum(mcc.gamma.0.5$edge.length)
+sum(mcc.gamma.1$edge.length)
+sum(mcc.gamma.0.1$edge.length)
+
+tree.brlens <- tibble(tree=c(
+    rep("ml.tree",length(ml.tree$edge.length)),
+    rep("mcc.lambda.1",length(mcc.lambda.1$edge.length)),
+    rep("mcc.lambda.10",length(mcc.lambda.10$edge.length)),#gamma 0.1
+    rep("mcc.lambda.100",length(mcc.lambda.100$edge.length)),
+    rep("mcc.lambda.1000",length(mcc.lambda.1000$edge.length)),
+    rep("mcc.gamma.0.5",length(mcc.gamma.0.5$edge.length)),
+    rep("mcc.gamma.1",length(mcc.gamma.1$edge.length)),
+    rep("mcc.gamma.0.1",length(mcc.gamma.0.1$edge.length))),
+    brlens=c(ml.tree$edge.length,mcc.lambda.1$edge.length,mcc.lambda.10$edge.length,mcc.lambda.100$edge.length,mcc.lambda.1000$edge.length,mcc.gamma.0.5$edge.length,mcc.gamma.1$edge.length,mcc.gamma.0.1$edge.length)
+)
+
+tree.brlens %>% ggplot(aes(x=brlens,color=tree)) + geom_density() + xlim(-0.01,0.025)
+
+# parsimony tree
+m.pd <- as.phyDat(read.FASTA(here("temp/alignments/myloplus-209x621-aligned.fasta")))
+phangorn::parsimony(tree=ml.tree,data=m.pd)
+
+pars.tr <- pratchet(m.pd)
+pars.tr.br <- acctran(pars.tr, m.pd)
+
+plot(ladderize(midpoint(pars.tr.br)))
+
+p <- ladderize(midpoint(pars.tr.br)) %>% 
+    ggtree() +
+    geom_tiplab()
+filename <- glue("temp/trees/myloplus.tr.pars.",as.character(Sys.Date()),".pdf")
+ggsave(filename=here(filename),plot=p,width=297,height=1000,units="mm",limitsize=FALSE)
+
+
+# average brlen
+1/(treelen/sites)
+1/(1165/621)
+exp(0.5)/(sum(pars.tr.br$edge.length)/length(pars.tr.br$edge.length))
+exp(0.5)/((sum(ml.tree$edge.length)*621)/length(ml.tree$edge.length))
+# = 0.5
 
 
 
-### TESTING ###
+
+### OLD TESTING ###
 
 
 

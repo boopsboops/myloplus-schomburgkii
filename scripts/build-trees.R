@@ -5,7 +5,6 @@ source(here::here("scripts/load-libs.R"))
 
 # set output dir
 outdir <- "2022-11-12-default"
-#outdir <- "2022-11-12-ml"
 dir.create(here("temp-local-only",outdir))
 
 
@@ -261,6 +260,28 @@ clades.pp <- clades.df %>%
 print(clades.pp)
 #clades.pp %>% write_csv(here("temp/alignments/clades-results.csv"))
 
+# get post clade probs for each group 
+# load trees
+trees.path <- here("temp-local-only",outdir,"all.runs.joined.rooted.trees")
+all.runs.joined.rooted <- read.nexus(trees.path)
+
+# fun to run over tree sample
+group_monophyly <- function(df,trs,topo) {
+    res <- mcmapply(function(x) ape::is.monophyletic(phy=x,tips=pull(filter(df,clade==topo),dbidNex)), x=trs,SIMPLIFY=TRUE,USE.NAMES=FALSE,mc.cores=8)
+    res <- as.numeric(res)
+    prop <- sum(res)/length(res)
+    tib <- tibble(clade=topo,postCladeProb=prop)
+    return(tib)
+}
+# test on one
+#group_monophyly(df=clades.df,trs=all.runs.joined.rooted,topo="guiana-shield-subset")
+
+# run over all trees and clades
+clades.tibs <- mapply(function(x) group_monophyly(df=clades.df,trs=all.runs.joined.rooted,topo=x), x=pull(distinct(clades.df,clade),clade), SIMPLIFY=FALSE,USE.NAMES=FALSE)
+
+# combine
+groups.pp <- bind_rows(clades.tibs)
+#groups.pp %>% write_csv(here("temp/alignments/groups-results.csv"))
 
 
 

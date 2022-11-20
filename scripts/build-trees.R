@@ -5,7 +5,7 @@ source(here::here("scripts/load-libs.R"))
 
 # set output dir
 outdir <- "2022-11-12-default"
-dir.create(here("temp-local-only",outdir))
+# dir.create(here("temp-local-only",outdir))
 
 
 ### RUN RAXML NG ###
@@ -244,6 +244,14 @@ ggsave(filename=here(filename),plot=plots.joined,width=297,height=1000,units="mm
 
 
 ### HYPOTHESES SUPPORT ###
+# filter schomburgkii
+#master.df.red.probs %>% 
+#    filter(specificEpithet=="schomburgkii") %>% 
+#    select(dbidNex,waterBody,nHaps,labelHash) %>%
+#    arrange(labelHash,waterBody,desc(nHaps),dbidNex) %>%
+#    write_csv(here("temp/alignments/schomburgkii.csv"))
+
+# add species clade groups by hand
 # load table of clades
 clades.df <- read_csv(here("temp/alignments/clades-test.csv"),show_col_types=FALSE)
 
@@ -273,5 +281,6 @@ clades.tibs <- mapply(function(x) group_monophyly(df=clades.df,trs=all.runs.join
 
 # combine
 groups.pp <- bind_rows(clades.tibs)
-#groups.pp %>% write_csv(here("temp/alignments/groups-results.csv"))
-
+post.delim.clade.probs <- clades.pp %>% left_join(groups.pp) %>% rename(postDelimProb=postProb)
+print(post.delim.clade.probs)
+#post.delim.clade.probs %>% write_csv(here("temp/alignments/groups-results.csv"))

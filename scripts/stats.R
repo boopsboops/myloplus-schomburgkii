@@ -63,6 +63,7 @@ master.df.red %>%
     count(sciNameValid) %>% 
     print(n=Inf)
 
+# samples per spp avg (HAPS)
 master.df.red %>% 
     mutate(sciNameValid=if_else(is.na(identificationQualifier),paste(genus,specificEpithet),paste(genus,identificationQualifier))) %>% 
     count(sciNameValid) %>% 
@@ -113,6 +114,70 @@ delimit.names %>%
     summarise(minInterSpp=min(minInter),maxIntraSpp=max(maxIntra)) %>%
     ungroup() %>%
     print(n=Inf)
+
+# run for only M. schomburgkii delims
+
+# load clades
+clades.df <- read_csv(here("temp/alignments/clades-test.csv"),show_col_types=FALSE)
+clades.df <- clades.df %>% select(dbidNex,clade)
+
+# subset dna
+seqs.fas.red.schomb <- seqs.fas.red[pull(filter(master.df.red.probs,specificEpithet=="schomburgkii"),dbidNex)]
+
+# get dist matrix and get spider dists
+mylo.dist.schomb <- ape::dist.dna(seqs.fas.red.schomb,model="raw",pairwise.deletion=TRUE)
+
+
+get_group_dists <- function(sp) {
+    # subset
+    delimit.names <- master.df.red.probs %>% 
+        filter(specificEpithet=="schomburgkii") %>% 
+        select(dbidNex) %>%
+        left_join(filter(clades.df,clade==sp)) %>% 
+        replace_na(list(clade="other")) %>%
+        rename(delimitName=clade) %>%
+        arrange(dbidNex[names(seqs.fas.red.schomb)])
+    # make dists per group
+    mylo.spp.schomb <- delimit.names %>% pull(delimitName)
+    mylo.min.inter.schomb <- nonConDist(distobj=mylo.dist.schomb,sppVector=mylo.spp.schomb,propZero=FALSE,rmNA=FALSE)
+    mylo.max.intra.schomb <- maxInDist(distobj=mylo.dist.schomb,sppVector=mylo.spp.schomb,propZero=FALSE,rmNA=FALSE)
+    # summarise
+    delimit.names.dist <- delimit.names %>% 
+        mutate(minInter=mylo.min.inter.schomb,maxIntra=mylo.max.intra.schomb) %>% 
+        arrange(delimitName) %>%
+        group_by(delimitName) %>% 
+        summarise(minInterSpp=min(minInter),maxIntraSpp=max(maxIntra)) %>%
+        ungroup()
+    return(delimit.names.dist)
+}
+
+# test
+get_group_dists(sp="mapinguari")
+
+# run on all
+group.dists <- bind_rows(mapply(function(x) get_group_dists(sp=x), x=pull(distinct(clades.df,clade),clade), USE.NAMES=FALSE,SIMPLIFY=FALSE))
+
+# filter 
+group.dists <- group.dists %>% filter(delimitName!="other") %>% rename(clade=delimitName)
+
+# join with delim results and write out
+delim.df <- read_csv(here("temp/alignments/groups-results.csv"),show_col_types=FALSE)
+names.df <- read_csv(here("temp/alignments/species-names-ranges.csv"),show_col_types=FALSE)
+
+# tidy up 
+delim.df.tidy <- delim.df %>% 
+    left_join(group.dists) %>% 
+    left_join(names.df) %>% 
+    mutate(postDelimProb=round(postDelimProb,digits=2),
+        postCladeProb=round(postCladeProb,digits=2),
+        minInterSpp=round(minInterSpp,digits=3),
+        maxIntraSpp=round(maxIntraSpp,digits=3)) %>%
+    arrange(sortOrder) %>% 
+    select(species,range,postDelimProb,postCladeProb,minInterSpp,maxIntraSpp,clade)
+
+# write out
+print(delim.df.tidy)
+#delim.df.tidy %>% write_csv(here("temp/alignments/groups-results-distances.csv"))
 
 
 ### MAKE PARSIMONY TREE (REDUCED HAPS) ###

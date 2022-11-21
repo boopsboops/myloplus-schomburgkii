@@ -7,7 +7,7 @@ source(here::here("scripts/load-libs.R"))
 ### LOAD DATA ###
 seqs.fas <- read.FASTA(here("assets/sequences-master.fasta"))
 seqs.fas.red <- read.FASTA(here("temp/alignments/myloplus-209x621-aligned.fasta"))
-
+# 
 master.df <- read_csv(here("assets/tissues-master.csv"),show_col_types=FALSE)
 master.df.red <- read_csv(here("temp/alignments/myloplus-209.csv"),show_col_types=FALSE)
 master.df.red.probs <- read_csv(here("temp/alignments/myloplus-209-mptp.csv"),show_col_types=FALSE)
@@ -17,6 +17,8 @@ master.df.red.probs <- read_csv(here("temp/alignments/myloplus-209-mptp.csv"),sh
 
 # mafft align seqs
 seqs.fas.ali <- as.matrix(mafft(seqs.fas,method="auto",exec="mafft"))
+# trim
+seqs.fas.ali <- seqs.fas.ali[,44:dim(seqs.fas.ali)[2]]
 # make nj and root
 seqs.fas.ali.nj <- phangorn::midpoint(ape::nj(ape::dist.dna(seqs.fas.ali,model="raw",pairwise.deletion=TRUE)))
 # remove negative edges
@@ -51,6 +53,7 @@ master.df %>%
     count(sciNameValid) %>%
     print(n=Inf)
 
+# samples per spp (ALL AVGS)
 master.df %>% 
     mutate(sciNameValid=if_else(is.na(identificationQualifier),paste(genus,specificEpithet),paste(genus,identificationQualifier))) %>% 
     count(sciNameValid) %>%
@@ -59,13 +62,11 @@ master.df %>%
 
 # samples per spp (HAPS)
 master.df.red %>% 
-    mutate(sciNameValid=if_else(is.na(identificationQualifier),paste(genus,specificEpithet),paste(genus,identificationQualifier))) %>% 
     count(sciNameValid) %>% 
     print(n=Inf)
 
 # samples per spp avg (HAPS)
 master.df.red %>% 
-    mutate(sciNameValid=if_else(is.na(identificationQualifier),paste(genus,specificEpithet),paste(genus,identificationQualifier))) %>% 
     count(sciNameValid) %>% 
     summarise(min=min(n),max=max(n),mean=mean(n),median=median(n)) %>%
     print(n=Inf)
@@ -85,6 +86,47 @@ master.df %>%
 master.df %>% 
     count(waterBody) %>% 
     print(n=Inf)
+
+# summary table
+# n samples 
+master.df %>% 
+    mutate(sciNameValid=if_else(is.na(identificationQualifier),paste(genus,specificEpithet),paste(genus,identificationQualifier))) %>% 
+    mutate(lonlat=paste(decimalLatitude,decimalLongitude)) %>%
+    group_by(sciNameValid) %>%
+    summarise(nSamples=length(sciNameValid),nBasins=length(unique(waterBody)),nLocalities=length(unique(lonlat))) %>% 
+    ungroup() %>% 
+    left_join(rename(count(master.df.red,sciNameValid),nHaps=n)) %>%
+    print(n=Inf) #%>%
+    #write_csv(here("temp/manuscript/tables/sampling-summary.csv"))
+
+# schomb
+master.df %>% 
+    mutate(sciNameValid=if_else(is.na(identificationQualifier),paste(genus,specificEpithet),paste(genus,identificationQualifier))) %>% 
+    filter(specificEpithet=="schomburgkii") %>%
+    distinct(sciNameValid,waterBody)
+
+# published versus not
+master.df %>% 
+    mutate(sciNameValid=if_else(is.na(identificationQualifier),paste(genus,specificEpithet),paste(genus,identificationQualifier))) %>% 
+    filter(specificEpithet=="schomburgkii") %>%
+    distinct(sciNameValid,label,associatedSequences) %>%
+    arrange(associatedSequences) %>%
+    print(n=Inf)
+
+# seq lengths (ALL)
+dim(seqs.fas.ali)
+fas2tab(as.list(seqs.fas.ali)) %>% 
+    mutate(nucleotides=str_replace_all(nucleotides,"-","")) %>%
+    mutate(length=str_length(nucleotides)) %>%
+    summarise(mean=mean(length),med=median(length),min=min(length),max=max(length))
+
+# seq lengths (HAPS)
+dim(as.matrix(seqs.fas.red))
+fas2tab(seqs.fas.red) %>% 
+    mutate(nucleotides=str_replace_all(nucleotides,"-","")) %>%
+    mutate(length=str_length(nucleotides)) %>%
+    summarise(mean=mean(length),med=median(length),min=min(length),max=max(length))
+
 
 # distances
 delimit.names <- master.df.red.probs %>% 

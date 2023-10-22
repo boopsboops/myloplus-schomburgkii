@@ -1,0 +1,10 @@
+sortOrder,species,range,clade
+1,Myloplus aylan,"Upper Amazon, Madeira, Branco",aylan
+2,Myloplus sauron,Xingu,sauron
+3,Myloplus schomburgkii,Brazilian Shield and Guiana Shield,schomburgkii-one-clade-all
+4,Myloplus schomburgkii,Brazilian Shield including Teles Pires,schomburgkii-brazilian-shield-all
+5,Myloplus schomburgkii,Brazilian Shield excluding Teles Pires,schomburgkii-brazilian-shield-subset
+6,Myloplus schomburgkii,Teles Pires,schomburgkii-teles-pires
+7,Myloplus schomburgkii,Guiana Shield including Orinoco-Cassiquiare,schomburgkii-guiana-shield-all
+8,Myloplus schomburgkii,Guiana Shield excluding Orinoco-Cassiquiare,schomburgkii-guiana-shield-subset
+9,Myloplus schomburgkii,Orinoco-Cassiquiare,schomburgkii-orinoco-cassiquiare

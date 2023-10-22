@@ -17,7 +17,9 @@ seqs.fas.df <- fas2tab(seqs.fas) %>%
 
 # format for derep
 master.df %<>% 
-    left_join(seqs.fas.df ) %>%
+    mutate(specificEpithet=str_replace_all(specificEpithet,"sauron","schomburgkii")) %>%
+    mutate(specificEpithet=str_replace_all(specificEpithet,"aylan","schomburgkii")) %>%
+    left_join(seqs.fas.df) %>%
     mutate(sciNameValid=if_else(is.na(identificationQualifier),paste(genus,specificEpithet),paste(genus,identificationQualifier))) %>%
     mutate(dbid=label,dbidNex=glue("dbid_{label}"))# old way = paste0("dbid_",label)
 
@@ -25,7 +27,7 @@ master.df %<>%
 master.df.red <- haps2fas(df=master.df)
 glimpse(master.df.red)
 # write out
-#write_csv(master.df.red,here("temp/alignments/myloplus-209.csv"))
+write_csv(master.df.red,here("temp/alignments/myloplus-209.csv"))
 
 # make labels and align
 seqs.fas.red <- tab2fas(df=master.df.red,seqcol="nucleotidesFrag",namecol="dbidNex")
@@ -42,7 +44,7 @@ write.nexus.data(seqs.fas.red.ali.trim,here("temp/alignments/myloplus-209x621-al
 write.FASTA(seqs.fas.red.ali.trim,here("temp/alignments/myloplus-209x621-aligned.fasta"))
 
 
-### MAKE A QUICK TREE ###
+### MAKE A QUICK ML TREE ###
 
 # load data
 seqs.fas <- read.FASTA("assets/sequences-master.fasta")
@@ -76,5 +78,5 @@ p <- myloplus.tr %>%
     xlim(0,0.35)
 
 # plot
-filename <- glue("temp/myloplus.tr.",as.character(Sys.Date()),".pdf")
+filename <- glue("temp/trees/myloplus.tr.",as.character(Sys.Date()),".pdf")
 ggsave(filename=here(filename),plot=p,width=297,height=2500,units="mm",limitsize=FALSE)

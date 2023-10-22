@@ -4,8 +4,11 @@
 source(here::here("scripts/load-libs.R"))
 
 # set output dir
-outdir <- "2022-11-12-default"
-# dir.create(here("temp-local-only",outdir))
+outdir <- as.character(Sys.Date())
+dir.create(here("temp-local-only",outdir))
+
+# copy alignment
+file.copy(from=here("temp/alignments/myloplus-209x621-aligned.fasta"),to=here("temp-local-only",outdir,"myloplus-209x621-aligned.fasta"))
 
 
 ### RUN RAXML NG ###
@@ -30,7 +33,7 @@ p <- rax.tr.root %>%
     xlim(0,0.4)
 
 # plot
-filename <- glue("temp/trees/myloplus.tr.ml.",as.character(Sys.Date()),".pdf")
+filename <- glue("temp/trees/myloplus.tr.ml.",outdir,".pdf")
 ggsave(filename=here(filename),plot=p,width=297,height=1000,units="mm",limitsize=FALSE)
 
 
@@ -88,7 +91,7 @@ p <- mcc.tre %>%
     xlim(0,0.25)
 
 # plot
-filename <- glue("temp/trees/myloplus.tr.mcc.",as.character(Sys.Date()),".default.pdf")
+filename <- glue("temp/trees/myloplus.tr.mcc.",outdir,".default.pdf")
 ggsave(filename=here(filename),plot=p,width=297,height=1000,units="mm",limitsize=FALSE)
 
 # sample
@@ -186,7 +189,7 @@ post.probs.label <- mcc.mptp.out.hash %>%
 # join to metadata df
 master.df.red.probs <- master.df.red %>% left_join(post.probs.label)
 glimpse(master.df.red.probs)
-#master.df.red.probs %>% write_csv(here("temp/alignments/myloplus-209-mptp.csv"))
+master.df.red.probs %>% write_csv(here("temp/alignments/myloplus-209-mptp.csv"))
 
 
 ### PLOT WITH APLOT ###
@@ -203,6 +206,7 @@ master.df.plot <- master.df.red.probs %>%
     select(dbidNex,labsPhy,labelHash,postProb)
 
 # colours with randomcoloR
+ncols <- master.df.plot %>% distinct(labelHash) %>% pull() %>% length()
 set.seed(11)
 cols <- randomcoloR::distinctColorPalette(k=ncols)
 
@@ -239,21 +243,15 @@ post.probs.plot <- master.df.plot %>%
 # join plots
 plots.joined <- post.probs.plot %>% aplot::insert_left(mcc.p,width=5)
 
-filename <- glue("temp/trees/myloplus.tr.mptp.",as.character(Sys.Date()),".pdf")
+filename <- glue("temp/trees/myloplus.tr.mptp.",outdir,".pdf")
 ggsave(filename=here(filename),plot=plots.joined,width=297,height=1000,units="mm",limitsize=FALSE)
 
 
 ### HYPOTHESES SUPPORT ###
-# filter schomburgkii
-#master.df.red.probs %>% 
-#    filter(specificEpithet=="schomburgkii") %>% 
-#    select(dbidNex,waterBody,nHaps,labelHash) %>%
-#    arrange(labelHash,waterBody,desc(nHaps),dbidNex) %>%
-#    write_csv(here("temp/alignments/schomburgkii.csv"))
 
 # add species clade groups by hand
 # load table of clades
-clades.df <- read_csv(here("temp/alignments/clades-test.csv"),show_col_types=FALSE)
+clades.df <- read_csv(here("assets/clades-test.csv"),show_col_types=FALSE)
 
 # add post probs
 clades.pp <- clades.df %>%
@@ -266,7 +264,7 @@ clades.pp <- clades.df %>%
     select(clade,postProb)
 
 print(clades.pp)
-#clades.pp %>% write_csv(here("temp/alignments/clades-results.csv"))
+clades.pp %>% write_csv(here("temp/alignments/clades-results.csv"))
 
 # get post clade probs for each group 
 # load trees
@@ -277,10 +275,10 @@ all.runs.joined.rooted <- read.nexus(trees.path)
 #group_monophyly(df=clades.df,trs=all.runs.joined.rooted,topo="guiana-shield-subset")
 
 # run over all trees and clades
-clades.tibs <- mapply(function(x) group_monophyly(df=clades.df,trs=all.runs.joined.rooted,topo=x,cores=8), x=pull(distinct(clades.df,clade),clade), SIMPLIFY=FALSE,USE.NAMES=FALSE)
+clades.tibs <- mapply(function(x) group_monophyly(df=clades.df,trs=all.runs.joined.rooted,topo=x,cores=4), x=pull(distinct(clades.df,clade),clade), SIMPLIFY=FALSE,USE.NAMES=FALSE)
 
 # combine
 groups.pp <- bind_rows(clades.tibs)
 post.delim.clade.probs <- clades.pp %>% left_join(groups.pp) %>% rename(postDelimProb=postProb)
 print(post.delim.clade.probs)
-#post.delim.clade.probs %>% write_csv(here("temp/alignments/groups-results.csv"))
+post.delim.clade.probs %>% write_csv(here("temp/alignments/groups-results.csv"))

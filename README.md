@@ -1,4 +1,4 @@
-[![DOI](https://zenodo.org/badge/327435617.svg)](https://zenodo.org/badge/latestdoi/327435617)
+[![DOI](https://zenodo.org/badge/517043711.svg)](https://zenodo.org/doi/10.5281/zenodo.10032056)
 
 # Integrative taxonomy of the black-barred disk pacus (Characiformes: Serrasalmidae: _Myloplus_), including the redescription of _Myloplus schomburgkii_ and the description of two new species
 
